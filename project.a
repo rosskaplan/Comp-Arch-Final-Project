@@ -1,1 +1,19 @@
-hi
+.data
+file: .asciiz "C:\Users\CCNez_000\Dropbox\Important Stuff\Freshman Spring\ece151\book.txt" # Name of the file in the //same directory//
+buffer: .space 0xFFFF
+
+.text
+.globl main
+main:
+
+li $v0, 13 # Prepare to open file.
+la $a0, file # Specifies the file.
+li $a1, 0
+li $a2, 0
+syscall # Puts the file descriptor in $v0
+
+move $a0, $v0
+li $v0, 14 #Prepares file to be read
+la $a1, buffer
+li $a2, 0xFFFF
+syscall # Reads it.
