@@ -14,6 +14,62 @@ syscall # Puts the file descriptor in $v0
 
 move $a0, $v0
 li $v0, 14 #Prepares file to be read
-la $a1, buffer
-li $a2, 0xFFFF
+la $a1, buffer #Specifies buffer
+li $a2, 0xFFFF #Specifies length
 syscall # Reads it.
+
+addi $a1, $a1, 1 #Aligns memory
+li $t0, 0xFFFF #Buffer size (NOTE THIS MAY BE OFF BY A FACTOR OF 4)
+add $s1, $a1, $t0
+
+#Produces number which are used to isolate character bits
+li $t0, 0x000000FF
+li $t1, 0x0000FF00
+li $t2, 0x00FF0000
+li $t3, 0xFF000000
+#letters start in ascii at 0x40
+li $t4, 0x00000040
+#space is 0x20, punctuation is upward
+li $t5, 0x00000021
+
+# we go to "nextbyte" when we have finished reading one byte of data
+nextbyte:
+lw $s0, 0($a1) #Load the next byte of data in
+
+addi $s0, $s0, 4 # i=i+4 #increases the "index" by a byte size
+
+#in char n the code analyzes the number to check what type of character it is
+
+char1:
+and $s2, $s2, $t4 #This line eliminates the other letters stored in the same byte
+srl $s2, $s2, 6 #This line shifts the letter to the correct byte position (NOTE MAY NEED TO SHIFT IN THE OPPOSITE DIRECTION)
+bgt $s2, $t4, letterfound #The compared numbers were determined by looking at the ascii table
+bgt $s2, $t5, punctfound #There are some odd characters that we are technically including, hopefully they will not show up in normal text.
+jump spacefound #If it's not a letter/number and it's not punctuation then it should be a space.  (Again, some exceptions)
+
+char2:
+and $s3, $s3, $t3
+srl $s3, $s3, 4
+bgt $s3, $t4, letterfound
+bgt $s3, $t5, punctfound
+jump spacefound
+char3:
+and $s4, $s4, $t2
+srl $s4, $s4, 2
+bgt $s4, $t4, letterfound
+bgt $s4, $t5, punctfound
+jump spacefound
+
+char4:
+and $s5, $s5, $t1
+bgt $s5, $t4, letterfound
+bgt $s5, $t5, punctfoun
+
+bne $s0, $s1, nextbyte # This may need to change to beq?
+
+jump spacefound
+
+letterfound:
+
+spacefound:
+punctfound:
