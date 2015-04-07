@@ -1,8 +1,11 @@
 .data
-file: .asciiz "C:\Users\CCNez_000\Dropbox\Important Stuff\Freshman Spring\ece151\book.txt"      # Name of the file in the //same directory//
-buffer: .space 0xFFFF  #Creates a space in user data
+file: .asciiz "C:\Users\CCNez_000\Dropbox\Important Stuff\Freshman Spring\ece151\book.txt"
+buffer: .space 5
+textbuffer: .space 0x4FFF0 	#Creates a space for the text
+wordbuffer: .space 0x4FFF0
 
 .text
+
 .globl main
 main:
 
@@ -13,251 +16,182 @@ li $a2, 0		#unused
 syscall      # Puts the file descriptor in $v0
 
 move $a0, $v0
-li $v0, 14      #Prepares file to be read
-la $a1, buffer      #Specifies buffer
-li $a2, 0xFFFF      #Specifies length
+li $v0, 14    #Prepares file to be read
+la $a1, textbuffer      #Specifies buffer
+li $a2, 0x4FFF0      #Specifies length
 syscall      # Reads it.
 
-addi $a1, $a1, 1      #Aligns memory
+li $t0, 0x000000FF	#For isolating bits
+li $t1, 0x00000040 	#one less than A
+li $t2, 0x0000005B	#One more than Z
+li $t3, 0x00000060	#One less than a
+li $t4, 0x0000007B	#One more than z
+li $t5, 0x00000020	#space
+li $t6, 0x00000021	#?
+li $t7, 0x0000002E	#.
+li $t8, 0x0000003F	#!
+li $t9, 0x0000000A	#\n
 
-#Produces number which are used to isolate character bits
-li $t0, 0x000000FF
-li $t1, 0x0000FF00
-li $t2, 0x00FF0000
-li $t3, 0xFF000000
-#letters start in ascii at 0x40 #DOES NOT ACCOUNT FOR SOME SPECIAL CHARS
-li $t4, 0x00000040
-#space is 0x20, punctuation is represented by 21, 2E, 3F
-li $t5, 0x00000020
-li $s1, 0x21
-li $t7, 0x2E
-li $t8, 0x3F
+la $s6, wordbuffer
 
-# we go to "nextbyte" when we have finished reading one byte of data
+add $v0, $v0, $a1
+
 nextbyte:
-lw $s0, 0($a1)      #Load the next byte of data in
+lw $s0, 0($a1)
+addi $a1, $a1, 4
+addi $s8, $zero, 0
+bgt $a1, $v0, done
 
-addi $a1, $a1, 4      # i=i+4      #increases the "index" by a byte size
+nextchar:
+srlv $s1, $s0, $s8
+and $s1, $s1, $t0
+jal lettertest
+jal punctest
+jal spacetest
 
-#in char n the code analyzes the number to check what type of character it is
-
-char1:
-and $s5, $s0, $t0		#This isolates the char we want.
-jal lettertest1		#This is a subroutine that tests if it's a letter
-jal spacetest1		#Same idea but for the space character
-jal puncttest1		#Same idea but for ? . !
-
-char2:
-and $s4, $s0, $t1
-srl $s4, $s4, 8		#This is used to get the number in the far right position of the word
-jal lettertest2
-jal spacetest2
-jal puncttest2
-
-char3:
-and $s3, $s0, $t2
-srl $s3, $s3, 16
-jal lettertest3
-jal spacetest3
-jal puncttest3
-
-char4:
-and $s2, $s0, $t3
-srl $s2, $s2, 24
-jal lettertest4
-jal spacetest4
-jal puncttest4
-
-bytedone:
-seq $t9, $zero, $s2		#set t9 to 1 if s2 the last char is 0.  
-						#(the char number is arbitrary, should check every time)
-beq $t9, $zero nextbyte	#Continue checking bytes if t9 isn't 13
-						#Basically an end of file check.
-j done					#Done finding information about the text
-
-#The following blocks are the codes for the previous subroutines:
+addi $s8, $s8 8
+beq $s8, 32, nextbyte
+j nextchar
 
 ###########################
 
-lettertest1:
-bgt $s5, $t4, letteradd1	#adds a letter, test should be modified for special symbols
-j $ra	#If the test fails, go back and check the next thing.
+lettertest:
+bgt $s1, $t3, checklower
+spaghetti:
+bgt $s1, $t1, checkupper
+jr $ra
 
-letteradd1:
-addi $s6, $s6, 1	#s6 register holds letter count
-andi $t6, 0x0		#t6 represents whether or not the last char was a space or punct
-					#if it is >1 then the last char was, this is used in later tests
-j char2 			#Checks the next char, no need for other tests.
- 
-############################
- 
-spacetest1:
-beq $s5, $t5, prev_space_check1		#if it is a space, check to see if the last char was a space or punct.
-j $ra	#If it fails, go back and check the next thing.
+checklower:
+blt $s1, $t4, letteradd
+j spaghetti
 
-prev_space_check1:
-beq $t6, $zero spaceadd1	#as stated previously t6 represents whether or not the last char was a space or punct
-							#We check to see if that's not 0 (>0).  We do this check because we only want to count the amount of spaces
-							#Between words so we can determine how many words there are.  
-j char2	#If it got here we already know it' a space so we can jump to the next character's test
+checkupper:
+blt $s1, $t2, letteradd
+jr $ra
 
-spaceadd1:
-addi $s7, $s7, 1	#add one to the space counter, note that this is not the actual number of spaces for the previously stated reason
-addi $t6, $t6, 0x01		#the next test will see that the previous char was a space/punct unless a letter comes next to reset t6
-j char2		#Again, no point in testing for other stuff if we already have a space confirmed.
+letteradd:
+addi $s2, $s2, 1
+addi $s7, $zero, 1
 
-###########################
- 
-puncttest1:
-beq $s5, $s1, prev_punct_check1		#Checks for ?
-beq $s5, $t7, prev_punct_check1		#Checks for .
-beq $s5, $t8, prev_punct_check1		#Checks for !
-j $ra	#Note that this is equivalent to going to the next character test
-
-prev_punct_check1:
-beq $t6, $zero, punctadd1	#We dont want to count multiple punctuation in a row as multiple sentences.
-j $ra
-
-punctadd1:
-addi $s8, $s8, 1  #Punctuation counter
-addi $t6, $t6, 0x01
-j $ra
-
-###########################
-
-
-#The following are very similar (with one exception at the end) tests for the other characters
-
-
-###########################
-
-lettertest2:
-bgt $s4, $t4, letteradd2
-j $ra
-
-letteradd2:
+sb $s1, 0($s6)
 addi $s6, $s6, 1
-andi $t6, 0x0
-j char3
- 
+
+jr $ra
+
 ############################
- 
-spacetest2:
-beq $s4, $t5, prev_space_check2
-j $ra
 
-prev_space_check2:
-beq $t6, $zero spaceadd2
-j $ra
+spacetest:
+beq $s7, $zero, jumpback
+beq $s1, $t5, spaceadd
+beq $s1, $t9, spaceadd
+jr $ra
 
-spaceadd2:
-addi $s7, $s7, 1
-addi $t6, $t6, 0x01
-j char3
-
-###########################
- 
-puncttest2:
-beq $s4, $s1, prev_punct_check2
-beq $s4, $t7, prev_punct_check2
-beq $s4, $t8, prev_punct_check2
-j $ra
-
-prev_punct_check2:
-beq $t6, $zero, punctadd2
-j $ra
-
-punctadd2:
-addi $s8, $s8, 1
-addi $t6, $t6, 0x01
-j $ra
+spaceadd:
+addi $s3, $s3, 1
+addi $s7, $zero, 0
+j checkifunique
 
 
-############################################################################################################
-
-lettertest3:
-bgt $s3, $t4, letteradd3
-j $ra
-
-letteradd3:
-addi $s6, $s6, 1
-andi $t6, 0x0
-j char4
- 
 ############################
- 
-spacetest3:
-beq $s3, $t5, prev_space_check3
-j $ra
 
-prev_space_check3:
-beq $t6, $zero spaceadd3
-j $ra
+punctest:
+beq $s7, $zero, jumpback
+beq $s1, $t6, puncadd
+beq $s1, $t7, puncadd
+beq $s1, $t8, puncadd
+jr $ra
 
-spaceadd3:
-addi $s7, $s7, 1
-addi $t6, $t6, 0x01
-j char4
+puncadd:
+addi $s4, $s4, 1
+addi $s7, $zero, 0
+j checkifunique
 
-###########################
- 
-puncttest3:
-beq $s3, $s1, prev_punct_check3
-beq $s3, $t7, prev_punct_check3
-beq $s3, $t8, prev_punct_check3
-j $ra
+jumpback:
+jr $ra
 
-prev_punct_check3:
-beq $t6, $zero, punctadd3
-j $ra
+checkifunique:
+li $a2, 0x10
+div $s6, $a2
+mfhi $a2
+sub $a2 $s6, $a2
+la $t0, wordbuffer
 
-punctadd3:
-addi $s8, $s8, 1
-addi $t6, $t6, 0x01
-j $ra
+loop:
+addi $t0, $t0, 0x10
+lw $t1, 0($t0)
+beq $t1, $zero, isunique
+lw $t5, 0($a2)
+bne $t1, $t5, loop
+lw $t2, 1($t0)
+lw $t6, 1($a2)
+bne $t2, $t6, loop
+lw $t3, 2($t0)
+lw $t7, 2($a2)
+bne $t3, $t7, loop
+lw $t4, 3($t0)
+lw $t8, 3($a2)
+bne $t4, $t8, loop
+j notunique
 
-#######################################################################################################################################
+isunique:
+li $a2, 0x10
+div $s6, $a2
+mfhi $a2
+li $t9, 16
+sub $a2, $t9, $a2
+add $s6, $s6, $a2
 
-lettertest4:
-bgt $s2, $t4, letteradd4
-j $ra
+li $t0, 0x000000FF	#For isolating bits
+li $t1, 0x00000040 	#one less than A
+li $t2, 0x0000005B	#One more than Z
+li $t3, 0x00000060	#One less than a
+li $t4, 0x0000007B	#One more than z
+li $t5, 0x00000020	#space
+li $t6, 0x00000021	#?
+li $t7, 0x0000002E	#.
+li $t8, 0x0000003F	#!
+li $t9, 0x0000000A	#\n
 
-letteradd4:
-addi $s6, $s6, 1
-andi $t6, 0x0
-j bytedone	#bytedone means we're at the end of our byte and we don't want to do any other tests so skip to the end.
- 
-############################
- 
-spacetest4:
-beq $s2, $t5, prev_space_check4
-j $ra
+jr $ra
 
-prev_space_check4:
-beq $t6, $zero spaceadd4
-j $ra
+notunique:
 
-spaceadd4:
-addi $s7, $s7, 1
-addi $t6, $t6, 0x01
-j bytedone
+addi $s6, $a2, 0
+sw $zero, 0($a2)
+sw $zero, 16($a2)
+sw $zero, 32($a2)
+sw $zero, 48($a2)
 
-###########################
- 
-puncttest4:
-beq $s2, $s1, prev_punct_check4
-beq $s2, $t7, prev_punct_check4
-beq $s2, $t8, prev_punct_check4
-j $ra
+li $t0, 0x000000FF	#For isolating bits
+li $t1, 0x00000040 	#one less than A
+li $t2, 0x0000005B	#One more than Z
+li $t3, 0x00000060	#One less than a
+li $t4, 0x0000007B	#One more than z
+li $t5, 0x00000020	#space
+li $t6, 0x00000021	#?
+li $t7, 0x0000002E	#.
+li $t8, 0x0000003F	#!
+li $t9, 0x0000000A	#\n
 
-prev_punct_check4:
-beq $t6, $zero, punctadd4
-j $ra
-
-punctadd4:
-addi $s8, $s8, 1
-addi $t6, $t6, 0x01
-j bytedone
+jr $ra
 
 done:
-addi $s6, $s6, 1	#The char count is generally of by one because of issues counting the first letter
+addi $s4, $s4, 1
+add $s0, $s3, $s4
+
+mtc1 $s0, $f0
+cvt.s.w $f0, $f0
+
+mtc1 $s2, $f3
+cvt.s.w $f3, $f3
+
+mtc1 $s3, $f1
+cvt.s.w $f1, $f1
+
+mtc1 $s4, $f2
+cvt.s.w $f2, $f2
+
+div.s $f4, $f0, $f2
+div.s $f5, $f3, $f0
+
+
