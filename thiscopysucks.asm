@@ -85,8 +85,7 @@ la $a1, databuffer      #Specifies buffer
 li $a2, 0xFF00      #Specifies length
 syscall      # Reads it.
 la $t1, databuffer
-li $t0, 0xFF00	#Goes to the end of databuffer
-add $t1, $t1, $t0
+li $t1, 0xFF00	#Goes to the end of databuffer
 sw $v0, 0($t1)		#Stores the length of the database there for LATER
 
 ####### These two syscalls open the book
@@ -319,3 +318,116 @@ cvt.s.w $f6, $f6
 div.s $f4, $f0, $f2 # Average words per sentece
 div.s $f5, $f3, $f0	# Average characters per word
 div.s $f7, $f6, $f0	# Fraction of unique words in the text
+
+################################################
+#The following section is for analyzing the database.
+
+addi $s2, $zero, 0
+addi $s3, $zero, 0
+
+la $a1, databuffer	#beginning of database
+li $t0, 0xFF00
+add $a2, $a1, $t0	#End of database, location of the length of the database from EARLIER
+lw $v0, 0($a2)		#v0 now holds the length of database
+add $v0, $v0, $a1 	#v0 is now the location of the end of the database
+
+addi $t0, $zero, 0x2c 	#represents a comma
+addi $t1, $zero, 0x2F	#Numbers start right after this
+addi $t2, $zero, 0x3A	#Numbers end rigt before this
+addi $t3, $zero, 1,000,000 #10^6, 6 digits maximum accuracy
+addi $t4, $zero, 1	#field number 1
+addi $t5, $zero, 2	#field number 2
+addi $t6, $zero, 0x2E	#decimal point
+
+DATAnextword:
+lw $s0, 0($a1)	#Load the 4 characters
+addi $a1, $a1, 4	#Next loop uses the next 4 characters
+bgt $a1, $v0, DATAdone	#Stop when you get to the end of the file
+
+DATAnextchar:
+srlv $s1, $s0, $s8	#put the next character in s1
+andi $s1, $s1, 0xFF	#isolate it
+
+beq $s1, $t0, fieldUP	#increases the field number (goes to the next "section" in the database) returns s7 as the field number
+beq $s7, $t4, addfirstfield
+beq $s7, $t5, addsecondfield
+beq $s1, $t6, fixdecimal
+
+addi $s8, $s8 8		#so the next shift will provide the correct character
+beq $s8, 32, nextword	#Once you've read 4 characters, go on to the next byte
+j DATAnextchar	#Otherwise go to the next character
+
+#############################################
+fixdecimal:
+addi $s4, $zero, $s3	#s4 now contains the amount of digits to the left of the decimal
+
+fieldUP
+beq $s7, $t4, convertfloat1	#converts average characters per word
+beq $s7, $t5, convertfloat2	#converts average words per sentence
+addi $s7, $s7, 1
+j DATAnextchar
+
+exponentiate:
+mult $t8, $t8, $t7
+addi $s4, $s4, -1
+bne $s4, $zero, exponentiate
+jr $ra
+
+######################################################
+
+convertfloat1:
+sub $s4, $s3, $s4	#number of digits to the right of the decimal
+addi $t8, $zero, 1	#used in exponentiate	
+addi $t7, $zero, 10	#used in exponentiate
+jr exponentiate	#After this subroutine, t8 will be 10^s4
+
+mtc1 $s2, $f31	this is the unaligned number
+cvt.s.w $f31, $f31	#converts it from int to fp
+
+mtc1 $s4, $f30	this is the amount of digits.
+cvt.s.w $f30, $f30	#converts it from int to fp
+
+div.s $f29, $f31, $f30	#f29 now contains the correct floating point value.
+j Datanextchar
+
+addfirstfield:
+addi $s1 -0x30 #converts ascii to integer
+mult $s1, $s1, $t3	#Start of the "power series" for number (x10^6 + y10^5 + z10^4... etc)
+div $t3, $t3, 10	#lo = t1/10
+mflo $t3	#t1 = t1/10
+add $s2, $s2, $s1
+addi $s3, $s3, 1	#Number of digits counted so far - later used to "shift" the power series to the correct position
+j DATAnextchar
+
+######################################################
+
+convertfloat2:
+sub $s4, $s3, $s4	#number of digits to the right of the decimal
+addi $t8, $zero, 1	#used in exponentiate	
+addi $t7, $zero, 10	#used in exponentiate
+jr exponentiate	#After this subroutine, t8 will be 10^s4
+
+mtc1 $s2, $f31	this is the unaligned number
+cvt.s.w $f31, $f31	#converts it from int to fp
+
+mtc1 $s4, $f30	this is the amount of digits.
+cvt.s.w $f30, $f30	#converts it from int to fp
+
+div.s $f28, $f31, $f30	#f29 now contains the correct floating point value.
+j Datanextchar
+
+addsecondfield:
+addi $s1 -0x30 #converts ascii to integer
+mult $s1, $s1, $t3	#Start of the "power series" for number (x10^6 + y10^5 + z10^4... etc)
+div $t3, $t3, 10	#lo = t1/10
+mflo $t3	#t1 = t1/10
+add $s2, $s2, $s1
+addi $s3, $s3, 1	#Number of digits counted so far - later used to "shift" the power series to the correct position
+j DATAnextchar
+
+DATAdone:
+
+li $v0, 10      #exit
+syscall
+
+
