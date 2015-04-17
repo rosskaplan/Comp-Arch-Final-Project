@@ -32,6 +32,8 @@ syscall
 addi $t3, $zero, 0x0a	#t3 is the newline which shows up from the console input
 add $t1, $zero, $a0		#sets t1 equal to the starting address of the file name
 
+#a later note explains why words are loaded instead of bytes, however in this case it might have been more useful to use words
+
 nullify:	#This block searches the code for a newline
 lw $t0, 0($t1)
 
@@ -76,7 +78,7 @@ j open
 
 open:
 
-#s0 - none
+#s0 - current mips word
 #s1 - The current character being read
 #s2 - The total amount of letters read so far
 #s3 - The total amount of spaces and newlines
@@ -107,7 +109,13 @@ syscall      # Reads it.
 addi $t9, $zero, 0	#initialize to 0, just in case
 la $s6, wordbuffer	#Start of "dictionary
 
-add $v0, $v0, $a1	#v0 now represents the end of the file
+addi $a3, $a1, 0
+sll $v1, $v0, 2			
+add $v0, $v0, $a1
+add $v1, $v1, $a1
+
+addi $v0, $v0, 4		#v0 now represents the end of the file
+
 
 #Note that the following code for extracting characters may look odd.  Instead of reading the memory byte by byte
 #we load in a word at a time and extract each byte individually.  This is mainly an experiment in optimization -
@@ -121,6 +129,10 @@ addi $s8, $zero, 0	#reset s8, s8 is used as a number which determines what chara
 bgt $a1, $v0, done	#Stop when you get to the end of the file
 
 nextchar:
+addi $a3, $a3, 4
+bgt $a3, $v1, done
+
+
 srlv $s1, $s0, $s8	#put the next character in s1
 andi $s1, $s1, 0xFF	#isolate it and store it in s1
 
