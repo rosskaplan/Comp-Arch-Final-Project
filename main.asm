@@ -15,6 +15,9 @@ buffer: .space 3	#to allign the next memory
 wordbuffer: .space 0x4FFF0	#Creates a space for the "dictionary"
 currentauthor: .space 0x1000
 bestauthor: .space 0x1000
+result1: .asciiz "Average words per sentece = "
+result2: .asciiz "Average characters per word = "
+result3: .asciiz "Fraction of unique words in the text = "
 
 
 .text
@@ -335,8 +338,34 @@ mtc1 $s5, $f6
 cvt.s.w $f6, $f6
 
 div.s $f4, $f0, $f2 # Average words per sentece
+
+li      $v0, 4
+la      $a0, result1
+syscall                      # print out "Average words per sentece = "
+
+li      $v0, 2
+move    $f12, $f4
+syscall                      # print out actual sum
+
 div.s $f5, $f3, $f0	# Average characters per word
+
+li      $v0, 4
+la      $a0, result2
+syscall                      # print out "Average characters per word = "
+
+li      $v0, 2
+move    $f12, $f5
+syscall                      # print out actual sum
+
 div.s $f7, $f6, $f0	# Fraction of unique words in the text
+
+li      $v0, 4
+la      $a0, result3
+syscall                      # print out "Fraction of unique words in the text = "
+
+li      $v0, 2
+move    $f12, $f7
+syscall                      # print out actual sum
 
 #PAST THIS POINT VARIABLES HAVE DIFFERENT MEANINGS
 #s0 - none
@@ -543,15 +572,4 @@ j new_best_found
 
 finish:
 j main
-
-
-
-
-
-
-
-
-
-
-
 
