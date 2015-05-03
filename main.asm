@@ -18,6 +18,7 @@ bestauthor: .space 0x1000
 result1: .asciiz "Average words per sentece = "
 result2: .asciiz "Average characters per word = "
 result3: .asciiz "Fraction of unique words in the text = "
+result4: .asciiz "Number of clauses in the text = "
 
 
 .text
@@ -139,10 +140,12 @@ bgt $a3, $v1, done
 srlv $s1, $s0, $s8	#put the next character in s1
 andi $s1, $s1, 0xFF	#isolate it and store it in s1
 
+jal semitest #Subroutine which determines if the character is a semi-colon for clause detection
 jal lettertestLOWER	#Subroutine which determines if the character is a letter (input is s1)
 jal punctest	#Subroutine which determines if the character is punctuation (input is s1)
 jal spacetest	#Subroutine which determines if the character is a space or newline (input is s1)
 jal numbertest	#Subroutine which determines if the character is a digit (input is s1)
+
 
 skip:	#skip the rest of the tests if the character has been determined
 addi $s8, $s8, 8		#so the next shift will provide the correct character
@@ -157,9 +160,22 @@ li $t2, 0x3A	#one more than 9 (upper bound)
 bgt $s1, $t1, checkupperbound
 jr $ra
 
+semitest:
+li TEMPORARY REGISTER, 0x3B
+beq $s1, TEMPORARY REGISTER, semicount
+jr $ra
+
+semicount: 
+
+add TEMPORARY REGISTER, TEMPORARY REGISTER, 1
+mtc1 TEMPORARY REGISTER, $f14	#moves total amount of words to an fp register
+cvt.s.w $f14, $f14	#converts it from int to fp
+xor TEMPORARY REGISTER, TEMPORARY REGISTER, TEMPORARY REGISTER #wipes $t1 for later use
+jr $ra
+
 checkupperbound:
 blt $s1, $t2, isnumber
-j $ra
+jr $ra
 
 isnumber:
 bgt $s7, $zero, revert #if the previous character was a letter, revert some changes.
@@ -346,7 +362,7 @@ syscall                      # print out "Average words per sentece = "
 li      $v0, 2
 move    $f12, $f4
 syscall                      # print out actual sum
-
+#########
 div.s $f5, $f3, $f0	# Average characters per word
 
 li      $v0, 4
@@ -356,7 +372,7 @@ syscall                      # print out "Average characters per word = "
 li      $v0, 2
 move    $f12, $f5
 syscall                      # print out actual sum
-
+#########
 div.s $f7, $f6, $f0	# Fraction of unique words in the text
 
 li      $v0, 4
@@ -365,6 +381,14 @@ syscall                      # print out "Fraction of unique words in the text =
 
 li      $v0, 2
 move    $f12, $f7
+syscall                      # print out actual sum
+#######
+li      $v0, 4
+la      $a0, result4
+syscall                      # print out "Number of clauses in the text = "
+
+li      $v0, 2
+move    $f12, $f14
 syscall                      # print out actual sum
 
 #PAST THIS POINT VARIABLES HAVE DIFFERENT MEANINGS
@@ -568,6 +592,9 @@ j calculate_root
 
 new_best:
 add.s $f12, $f17, $f10		#Stores the current best in f12
+
+
+
 j new_best_found
 
 finish:
