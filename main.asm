@@ -19,6 +19,7 @@ result1: .asciiz "Average words per sentece = "
 result2: .asciiz "Average characters per word = "
 result3: .asciiz "Fraction of unique words in the text = "
 result4: .asciiz "Number of clauses in the text = "
+space: .asciiz "\n\n"
 
 
 .text
@@ -161,16 +162,16 @@ bgt $s1, $t1, checkupperbound
 jr $ra
 
 semitest:
-li TEMPORARY REGISTER, 0x3B
-beq $s1, TEMPORARY REGISTER, semicount
+li $t1, 0x3B
+beq $s1, $t1, semicount
 jr $ra
 
 semicount: 
 
-add TEMPORARY REGISTER, TEMPORARY REGISTER, 1
-mtc1 TEMPORARY REGISTER, $f14	#moves total amount of words to an fp register
+add $t1, $t1, 1
+mtc1 $t1, $f14	#moves total amount of words to an fp register
 cvt.s.w $f14, $f14	#converts it from int to fp
-xor TEMPORARY REGISTER, TEMPORARY REGISTER, TEMPORARY REGISTER #wipes $t1 for later use
+xor $t1, $t1, $t1 #wipes $t1 for later use
 jr $ra
 
 checkupperbound:
@@ -360,8 +361,13 @@ la      $a0, result1
 syscall                      # print out "Average words per sentece = "
 
 li      $v0, 2
-move    $f12, $f4
+mov.s    $f12, $f4
 syscall                      # print out actual sum
+
+addi $v0, $zero, 4  # print_string syscall
+la $a0, space       # load address of the string
+syscall
+
 #########
 div.s $f5, $f3, $f0	# Average characters per word
 
@@ -370,8 +376,13 @@ la      $a0, result2
 syscall                      # print out "Average characters per word = "
 
 li      $v0, 2
-move    $f12, $f5
+mov.s    $f12, $f5
 syscall                      # print out actual sum
+
+addi $v0, $zero, 4  # print_string syscall
+la $a0, space       # load address of the string
+syscall
+
 #########
 div.s $f7, $f6, $f0	# Fraction of unique words in the text
 
@@ -380,16 +391,26 @@ la      $a0, result3
 syscall                      # print out "Fraction of unique words in the text = "
 
 li      $v0, 2
-move    $f12, $f7
+mov.s    $f12, $f7
 syscall                      # print out actual sum
+
+addi $v0, $zero, 4  # print_string syscall
+la $a0, space       # load address of the string
+syscall
+
 #######
 li      $v0, 4
 la      $a0, result4
 syscall                      # print out "Number of clauses in the text = "
 
 li      $v0, 2
-move    $f12, $f14
+mov.s    $f12, $f14
 syscall                      # print out actual sum
+
+addi $v0, $zero, 4  # print_string syscall
+la $a0, space       # load address of the string
+syscall
+#######
 
 #PAST THIS POINT VARIABLES HAVE DIFFERENT MEANINGS
 #s0 - none
