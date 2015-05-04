@@ -1,5 +1,5 @@
 #This program is written by Cory Nezin and Ross Kaplan
-#Most recently edited 4/17/2015
+#Most recently edited 5/4/2015
 #The purpose of this code is to determine authorship through analysis of linguistic
 #features such as average words per sentence, average characters per word, and percentage of unique words
 
@@ -13,13 +13,8 @@ databuffer: .space 0xFF00	#Creates a space for the database
 datafile: .asciiz "database.txt"	#Name of the database file
 buffer: .space 3	#to allign the next memory
 wordbuffer: .space 0x4FFF0	#Creates a space for the "dictionary"
-currentauthor: .space 0x1000
-bestauthor: .space 0x1000
-result1: .asciiz "Average words per sentece = "
-result2: .asciiz "Average characters per word = "
-result3: .asciiz "Fraction of unique words in the text = "
-result4: .asciiz "Number of clauses in the text = "
-space: .asciiz "\n\n"
+bestauthor: .space 0x100
+final_answer: .space 0x100
 
 
 .text
@@ -141,12 +136,10 @@ bgt $a3, $v1, done
 srlv $s1, $s0, $s8	#put the next character in s1
 andi $s1, $s1, 0xFF	#isolate it and store it in s1
 
-jal semitest #Subroutine which determines if the character is a semi-colon for clause detection
 jal lettertestLOWER	#Subroutine which determines if the character is a letter (input is s1)
 jal punctest	#Subroutine which determines if the character is punctuation (input is s1)
 jal spacetest	#Subroutine which determines if the character is a space or newline (input is s1)
 jal numbertest	#Subroutine which determines if the character is a digit (input is s1)
-
 
 skip:	#skip the rest of the tests if the character has been determined
 addi $s8, $s8, 8		#so the next shift will provide the correct character
@@ -161,22 +154,9 @@ li $t2, 0x3A	#one more than 9 (upper bound)
 bgt $s1, $t1, checkupperbound
 jr $ra
 
-semitest:
-li $t1, 0x3B
-beq $s1, $t1, semicount
-jr $ra
-
-semicount: 
-
-add $t1, $t1, 1
-mtc1 $t1, $f14	#moves total amount of words to an fp register
-cvt.s.w $f14, $f14	#converts it from int to fp
-xor $t1, $t1, $t1 #wipes $t1 for later use
-jr $ra
-
 checkupperbound:
 blt $s1, $t2, isnumber
-jr $ra
+j $ra
 
 isnumber:
 bgt $s7, $zero, revert #if the previous character was a letter, revert some changes.
@@ -355,72 +335,18 @@ mtc1 $s5, $f6
 cvt.s.w $f6, $f6
 
 div.s $f4, $f0, $f2 # Average words per sentece
-
-li      $v0, 4
-la      $a0, result1
-syscall                      # print out "Average words per sentece = "
-
-li      $v0, 2
-mov.s    $f12, $f4
-syscall                      # print out actual sum
-
-addi $v0, $zero, 4  # print_string syscall
-la $a0, space       # load address of the string
-syscall
-
-#########
 div.s $f5, $f3, $f0	# Average characters per word
-
-li      $v0, 4
-la      $a0, result2
-syscall                      # print out "Average characters per word = "
-
-li      $v0, 2
-mov.s    $f12, $f5
-syscall                      # print out actual sum
-
-addi $v0, $zero, 4  # print_string syscall
-la $a0, space       # load address of the string
-syscall
-
-#########
 div.s $f7, $f6, $f0	# Fraction of unique words in the text
-
-li      $v0, 4
-la      $a0, result3
-syscall                      # print out "Fraction of unique words in the text = "
-
-li      $v0, 2
-mov.s    $f12, $f7
-syscall                      # print out actual sum
-
-addi $v0, $zero, 4  # print_string syscall
-la $a0, space       # load address of the string
-syscall
-
-#######
-li      $v0, 4
-la      $a0, result4
-syscall                      # print out "Number of clauses in the text = "
-
-li      $v0, 2
-mov.s    $f12, $f14
-syscall                      # print out actual sum
-
-addi $v0, $zero, 4  # print_string syscall
-la $a0, space       # load address of the string
-syscall
-#######
 
 #PAST THIS POINT VARIABLES HAVE DIFFERENT MEANINGS
 #s0 - none
 #s1 - The character that was just read in
 #s2 - This number is the amount of digits to the right of the decimal
 #s3 - the current byte in the author's name memory location
-#s4 - The current field in the database - 1 is average words per sentence, 2 is average chars per word, 3 is author name
+#s4 - The current field in the database : 1 is average words per sentence, 2 is average chars per word, 3 is author name
 #s5 - the current value of the number from field 1 or 2 (a digit gets added every time the field is read)
 #s6 - The current digit # (digit # of 101 is 3) of the number from field 1 or 2
-#s7 - none
+#s7 - characters in authors name
 
 ####### These two syscalls open the database
 li $v0, 13      	# Prepare to open file.
@@ -444,13 +370,13 @@ add $v0, $v0, $a1		#v0 is the end
 
 li $s6, 0				#initialize current digit
 
-la $s3, currentauthor	#so we start writing to the correct locationl
+la $s3, bestauthor	#so we start writing to the correct locationl
 
 #This section loads the database a byte at a time because it is much smaller and the performance hit wouldn't be as large
 
 load_char:
 addi $v0, $v0, -1		#Note that the file is loaded from end to start to make calculations simpler
-blt $v0, $a1, finish
+blt $v0, $a1, reverse
 
 lb $s1, 0($v0)			#Load the current byte in
 
@@ -502,17 +428,23 @@ addi $s6, $s6, 1		#Add one to the amount of digits in this number
 ##################
 
 letter:
+addi $t1, $zero, 0x0b
+blt $s1, $t1, stop_writing
 bc1f load_char			#If it is not the best author, don't write the name.
+addi $s7, $s7, 1
 sb $s1, 0($s3)			#save character of the best authors name to memory
 addi $s3, $s3, 1		#store the next value one up
 j load_char
 
 ##################
+stop_writing:
+c.lt.s $f9, $f8				#Certainly sets fcond to be 0 (2>1/2)
+j load_char
+##################
 
 newline:
 li $s4, 0				#reset s4
 li $s5, 0				#reset s5
-la $t0, currentauthor	#reset the write address of the authors name to the original position.
 j load_char
 
 ################## ABOVE NEEDS TO FIXED, LINK WITH AUTHORSHIP TEST SOMEHOW
@@ -594,7 +526,7 @@ j authorship_test
 
 make_positive:
 #If it's negative we just subtract iself twice to get the positive version
-add.s $f26, $f26, $f28
+add.s $f26, $f17, $f28
 sub.s $f28, $f28, $f26
 sub.s $f28, $f28, $f26
 j number_is_positive
@@ -613,11 +545,35 @@ j calculate_root
 
 new_best:
 add.s $f12, $f17, $f10		#Stores the current best in f12
-
-
-
+li $s7, 0					#reset s7
+la $s3, bestauthor
 j new_best_found
 
+reverse:
+
+la $t0, bestauthor
+la $t9, bestauthor
+add $t0, $t0, $s7
+addi $t0, $t0, -1
+la $t2, final_answer
+
+load_best_author:
+blt $t0, $t9, finish
+lb $t1, 0($t0)
+sb $t1, 0($t2)
+add $t2, $t2, 1
+add $t0, $t0, -1
+j load_best_author
+
 finish:
-j main
+
+
+
+
+
+
+
+
+
+
 
